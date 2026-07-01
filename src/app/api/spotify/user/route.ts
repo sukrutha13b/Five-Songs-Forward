@@ -7,7 +7,8 @@ export async function GET(request: NextRequest) {
     const profile = await getUserProfile(accessToken);
     return NextResponse.json(profile);
   } catch (error) {
-    console.error('User profile error:', error);
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('User profile error:', message);
+    return NextResponse.json({ error: message }, { status: 401 });
   }
 }

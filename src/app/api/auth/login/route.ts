@@ -18,6 +18,7 @@ export async function GET() {
     scope: scopes,
     redirect_uri: redirectUri,
     state,
+    show_dialog: 'true',
   });
 
   const response = NextResponse.redirect(

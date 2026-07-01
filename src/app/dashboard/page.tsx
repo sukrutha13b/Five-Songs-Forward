@@ -64,6 +64,12 @@ export default function Dashboard() {
               className="rounded-full"
             />
           )}
+          <a
+            href="/api/auth/logout"
+            className="rounded-full border border-white/20 px-3 py-1 text-xs font-medium text-gray-300 transition-colors hover:bg-white/5 hover:text-white"
+          >
+            Log out
+          </a>
         </div>
       </div>
 

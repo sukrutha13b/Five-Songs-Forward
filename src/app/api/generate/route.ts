@@ -22,6 +22,7 @@ function checkRateLimit(userId: string): boolean {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  let currentUserEmail: string | null = null;
 
   try {
     const body = await request.json();
@@ -45,7 +46,10 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await getUserProfile(accessToken);
-    console.log(`[FSF] Generation started — ${user.id} — ${seeds.length} seeds`);
+    currentUserEmail = user.email;
+    console.log(
+      `[FSF] Generation started — id=${user.id} email=${user.email ?? '<none>'} — ${seeds.length} seeds`
+    );
 
     if (!checkRateLimit(user.id)) {
       return NextResponse.json(
@@ -117,8 +121,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[FSF] Generation failed:', error);
     const message = error instanceof Error ? error.message : String(error);
+    const detail = currentUserEmail
+      ? `[account=${currentUserEmail}] ${message}`
+      : message;
     return NextResponse.json(
-      { error: 'Failed to generate playlist', detail: message },
+      { error: 'Failed to generate playlist', detail },
       { status: 500 }
     );
   }

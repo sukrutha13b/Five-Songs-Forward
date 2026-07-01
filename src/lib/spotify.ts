@@ -122,7 +122,10 @@ export async function createPlaylist(
   );
 
   if (!createResponse.ok) {
-    throw new Error(`Failed to create playlist: ${createResponse.status}`);
+    const body = await createResponse.text().catch(() => '<no body>');
+    throw new Error(
+      `Failed to create playlist: ${createResponse.status} — userId=${userId} — spotify said: ${body}`
+    );
   }
 
   const playlist = await createResponse.json();

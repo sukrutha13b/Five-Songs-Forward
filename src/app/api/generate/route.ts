@@ -116,6 +116,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(playlist);
   } catch (error) {
     console.error('[FSF] Generation failed:', error);
-    return NextResponse.json({ error: 'Failed to generate playlist' }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: 'Failed to generate playlist', detail: message },
+      { status: 500 }
+    );
   }
 }

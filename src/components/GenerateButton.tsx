@@ -26,7 +26,8 @@ export default function GenerateButton({ seeds, canGenerate, onResult }: Generat
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Generation failed');
+        const parts = [data.error, data.detail].filter(Boolean);
+        throw new Error(parts.length ? parts.join(': ') : 'Generation failed');
       }
 
       const playlist = await res.json();

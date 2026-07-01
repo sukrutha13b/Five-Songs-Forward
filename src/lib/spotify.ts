@@ -123,8 +123,10 @@ export async function createPlaylist(
 
   if (!createResponse.ok) {
     const body = await createResponse.text().catch(() => '<no body>');
+    const jar = await cookies();
+    const grantedScope = jar.get('spotify_granted_scope')?.value ?? '<not set>';
     throw new Error(
-      `Failed to create playlist: ${createResponse.status} — userId=${userId} — spotify said: ${body}`
+      `Failed to create playlist: ${createResponse.status} — userId=${userId} — granted=[${grantedScope}] — spotify said: ${body}`
     );
   }
 

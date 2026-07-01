@@ -73,7 +73,12 @@ export async function GET(request: NextRequest) {
       ...baseCookie,
       maxAge: REFRESH_TOKEN_MAX_AGE,
     });
+    response.cookies.set('spotify_granted_scope', data.scope ?? '', {
+      ...baseCookie,
+      maxAge: REFRESH_TOKEN_MAX_AGE,
+    });
     response.cookies.delete('spotify_auth_state');
+    console.log('[FSF] OAuth callback — granted scope:', data.scope);
 
     return response;
   } catch (error) {

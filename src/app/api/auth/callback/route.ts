@@ -6,6 +6,8 @@ function getBaseUrl(request: NextRequest): string {
   return `${protocol}://${host}`;
 }
 
+const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24 * 30;
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
@@ -52,17 +54,25 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.redirect(`${baseUrl}/dashboard`);
 
-    const cookieOptions = {
+    const baseCookie = {
       httpOnly: true,
       secure: true,
       sameSite: 'lax' as const,
       path: '/',
-      maxAge: 3600 * 24 * 30,
     };
 
-    response.cookies.set('spotify_access_token', data.access_token, cookieOptions);
-    response.cookies.set('spotify_refresh_token', data.refresh_token, cookieOptions);
-    response.cookies.set('spotify_expires_at', expiresAt.toString(), cookieOptions);
+    response.cookies.set('spotify_access_token', data.access_token, {
+      ...baseCookie,
+      maxAge: data.expires_in,
+    });
+    response.cookies.set('spotify_expires_at', expiresAt.toString(), {
+      ...baseCookie,
+      maxAge: data.expires_in,
+    });
+    response.cookies.set('spotify_refresh_token', data.refresh_token, {
+      ...baseCookie,
+      maxAge: REFRESH_TOKEN_MAX_AGE,
+    });
     response.cookies.delete('spotify_auth_state');
 
     return response;

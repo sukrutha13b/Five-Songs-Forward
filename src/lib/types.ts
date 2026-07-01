@@ -1,9 +1,3 @@
-export interface SpotifyTokens {
-  access_token: string;
-  refresh_token: string;
-  expires_at: number;
-}
-
 export interface SeedTrack {
   id: string;
   name: string;
@@ -15,23 +9,10 @@ export interface SeedTrack {
   uri: string;
 }
 
-export interface AudioFeatures {
-  energy: number;
-  acousticness: number;
-  valence: number;
-  tempo: number;
-  instrumentalness: number;
-  danceability: number;
-  liveness: number;
-}
-
-export interface SeedWithFeatures extends SeedTrack {
-  features: AudioFeatures | null;
-}
+export type CandidateSource = 'catalogue' | 'artist-suggestion' | 'recently-played';
 
 export interface CandidateTrack extends SeedTrack {
-  features: AudioFeatures | null;
-  source: 'catalogue' | 'related-artist' | 'rescued-library';
+  source: CandidateSource;
   score: number;
   explanation?: string;
 }
@@ -46,18 +27,13 @@ export interface GeneratedPlaylist {
 export interface UserProfile {
   id: string;
   displayName: string;
-  email: string;
+  email: string | null;
   imageUrl: string | null;
 }
 
 export interface LLMInterpretation {
   directionSummary: string;
   searchQueries: string[];
-  targetFeatures: {
-    energy: { min: number; max: number };
-    acousticness: { min: number; max: number };
-    valence: { min: number; max: number };
-    tempo: { min: number; max: number };
-  };
+  artistSuggestions: string[];
   genreKeywords: string[];
 }

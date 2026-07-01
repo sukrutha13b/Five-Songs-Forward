@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const accessToken = await getValidToken(request.cookies);
+    const accessToken = await getValidToken();
     const tracks = await searchTracks(accessToken, q, 10);
     return NextResponse.json(tracks);
   } catch (error) {

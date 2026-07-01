@@ -3,10 +3,10 @@
 import Image from 'next/image';
 import { CandidateTrack } from '@/lib/types';
 
-const sourceBadge = {
+const sourceBadge: Record<CandidateTrack['source'], { label: string; color: string }> = {
   catalogue: { label: 'New Find', color: 'bg-blue-500/20 text-blue-400' },
-  'related-artist': { label: 'Related', color: 'bg-purple-500/20 text-purple-400' },
-  'rescued-library': { label: 'From Your Library', color: 'bg-green-500/20 text-green-400' },
+  'artist-suggestion': { label: 'Adjacent Artist', color: 'bg-purple-500/20 text-purple-400' },
+  'recently-played': { label: 'From Recent Plays', color: 'bg-green-500/20 text-green-400' },
 };
 
 export default function TrackCard({ track }: { track: CandidateTrack }) {

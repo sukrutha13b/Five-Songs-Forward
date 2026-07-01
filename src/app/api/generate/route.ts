@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getValidToken, getAudioFeatures, getUserProfile } from '@/lib/spotify';
+import { getValidToken, getUserProfile } from '@/lib/spotify';
 import { interpretSeeds, explainTrackMatch } from '@/lib/llm';
-import { computeSeedCentroid, gatherCandidates, rankAndSelect, generatePlaylistOnSpotify } from '@/lib/matching';
-import { SeedTrack, SeedWithFeatures } from '@/lib/types';
+import { gatherCandidates, rankAndSelect, generatePlaylistOnSpotify } from '@/lib/matching';
+import { SeedTrack } from '@/lib/types';
 
+// NOTE: Per-instance in-memory rate limit — fine for a single-user MVP demo.
+// If deployed on multi-instance serverless, this will not enforce across instances.
 const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 5;
 
 function checkRateLimit(userId: string): boolean {
   const now = Date.now();
   const timestamps = rateLimitMap.get(userId) || [];
-  const recent = timestamps.filter((t) => now - t < 60000);
-  if (recent.length >= 5) return false;
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (recent.length >= RATE_LIMIT_MAX) return false;
   recent.push(now);
   rateLimitMap.set(userId, recent);
   return true;
@@ -33,78 +37,70 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Auth
     let accessToken: string;
     try {
-      accessToken = await getValidToken(request.cookies);
+      accessToken = await getValidToken();
     } catch {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // User profile
     const user = await getUserProfile(accessToken);
     console.log(`[FSF] Generation started — ${user.id} — ${seeds.length} seeds`);
 
-    // Rate limit
     if (!checkRateLimit(user.id)) {
-      return NextResponse.json({ error: 'Rate limit exceeded. Try again in a minute.' }, { status: 429 });
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Try again in a minute.' },
+        { status: 429 }
+      );
     }
 
-    // Audio features for seeds
-    const featureStart = Date.now();
-    const seedIds = seeds.map((s) => s.id);
-    const featuresMap = await getAudioFeatures(accessToken, seedIds);
-    console.log(`[FSF] Audio features fetched — ${Date.now() - featureStart}ms`);
-
-    const seedsWithFeatures: SeedWithFeatures[] = seeds.map((s) => ({
-      ...s,
-      features: featuresMap?.get(s.id) || null,
-    }));
-
-    // LLM interpretation
     const llmStart = Date.now();
-    const llmInterpretation = await interpretSeeds(seedsWithFeatures);
-    const llmProvider = llmInterpretation ? 'groq/gemini' : 'null';
-    console.log(`[FSF] LLM interpretation — ${llmProvider} — ${Date.now() - llmStart}ms`);
+    const llmInterpretation = await interpretSeeds(seeds);
+    console.log(
+      `[FSF] LLM interpretation — ${llmInterpretation ? 'ok' : 'null'} — ${Date.now() - llmStart}ms`
+    );
 
-    // Compute centroid
-    const centroid = computeSeedCentroid(seedsWithFeatures);
-
-    // Gather candidates
     const candidates = await gatherCandidates(accessToken, seeds, llmInterpretation);
     const sourceCounts = {
       catalogue: candidates.filter((c) => c.source === 'catalogue').length,
-      related: candidates.filter((c) => c.source === 'related-artist').length,
-      library: candidates.filter((c) => c.source === 'rescued-library').length,
+      artist: candidates.filter((c) => c.source === 'artist-suggestion').length,
+      recent: candidates.filter((c) => c.source === 'recently-played').length,
     };
-    console.log(`[FSF] Candidates gathered — ${candidates.length} tracks from catalogue:${sourceCounts.catalogue} related:${sourceCounts.related} library:${sourceCounts.library}`);
-
-    // Rank and select
-    const finalTracks = await rankAndSelect(
-      accessToken,
-      candidates,
-      centroid,
-      llmInterpretation?.targetFeatures || null
+    console.log(
+      `[FSF] Candidates — ${candidates.length} (catalogue:${sourceCounts.catalogue} artist:${sourceCounts.artist} recent:${sourceCounts.recent})`
     );
 
-    const finalSourceCounts = {
+    const finalTracks = rankAndSelect(candidates);
+
+    if (finalTracks.length === 0) {
+      return NextResponse.json(
+        { error: 'Could not build a playlist — no candidates found. Try different seeds.' },
+        { status: 502 }
+      );
+    }
+
+    const finalCounts = {
       catalogue: finalTracks.filter((t) => t.source === 'catalogue').length,
-      related: finalTracks.filter((t) => t.source === 'related-artist').length,
-      library: finalTracks.filter((t) => t.source === 'rescued-library').length,
+      artist: finalTracks.filter((t) => t.source === 'artist-suggestion').length,
+      recent: finalTracks.filter((t) => t.source === 'recently-played').length,
     };
-    console.log(`[FSF] Final ${finalTracks.length} selected — catalogue:${finalSourceCounts.catalogue} related:${finalSourceCounts.related} library:${finalSourceCounts.library}`);
+    console.log(
+      `[FSF] Final ${finalTracks.length} selected — catalogue:${finalCounts.catalogue} artist:${finalCounts.artist} recent:${finalCounts.recent}`
+    );
 
-    // Generate explanations for first 5 tracks (non-blocking)
-    const explanationPromises = finalTracks.slice(0, 5).map(async (track) => {
-      try {
-        track.explanation = await explainTrackMatch(track, seeds);
-      } catch {
-        // Skip explanation on failure
+    // Serialize explanation calls (not parallel) so we don't burst the LLM
+    // rate limit. Skip entirely if seed interpretation already failed — both
+    // providers are likely exhausted, no point piling on.
+    if (llmInterpretation) {
+      for (const track of finalTracks.slice(0, 3)) {
+        try {
+          track.explanation = await explainTrackMatch(track, seeds);
+        } catch {
+          // Skip explanation on failure
+        }
       }
-    });
-    await Promise.all(explanationPromises);
+    }
 
-    // Create playlist
     const playlist = await generatePlaylistOnSpotify(
       accessToken,
       user.id,
@@ -113,14 +109,13 @@ export async function POST(request: NextRequest) {
       llmInterpretation?.directionSummary
     );
 
-    console.log(`[FSF] Playlist created — ${playlist.spotifyPlaylistId} — total ${Date.now() - startTime}ms`);
+    console.log(
+      `[FSF] Playlist created — ${playlist.spotifyPlaylistId} — total ${Date.now() - startTime}ms`
+    );
 
     return NextResponse.json(playlist);
   } catch (error) {
     console.error('[FSF] Generation failed:', error);
-    return NextResponse.json(
-      { error: 'Failed to generate playlist', phase: 'unknown' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to generate playlist' }, { status: 500 });
   }
 }

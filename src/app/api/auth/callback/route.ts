@@ -1,20 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+function getBaseUrl(request: NextRequest): string {
+  const host = request.headers.get('host') || 'localhost:3000';
+  const protocol = request.headers.get('x-forwarded-proto') || 'http';
+  return `${protocol}://${host}`;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const state = searchParams.get('state');
   const storedState = request.cookies.get('spotify_auth_state')?.value;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const baseUrl = getBaseUrl(request);
 
   if (!state || state !== storedState) {
     console.error('State mismatch in OAuth callback');
-    return NextResponse.redirect(`${appUrl}/?error=state_mismatch`);
+    return NextResponse.redirect(`${baseUrl}/?error=state_mismatch`);
   }
 
   if (!code) {
     console.error('No code in OAuth callback');
-    return NextResponse.redirect(`${appUrl}/?error=auth_failed`);
+    return NextResponse.redirect(`${baseUrl}/?error=auth_failed`);
   }
 
   const clientId = process.env.SPOTIFY_CLIENT_ID!;
@@ -38,17 +44,17 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text();
       console.error('Token exchange failed:', errorData);
-      return NextResponse.redirect(`${appUrl}/?error=auth_failed`);
+      return NextResponse.redirect(`${baseUrl}/?error=auth_failed`);
     }
 
     const data = await tokenResponse.json();
     const expiresAt = Date.now() + data.expires_in * 1000;
 
-    const response = NextResponse.redirect(`${appUrl}/dashboard`);
+    const response = NextResponse.redirect(`${baseUrl}/dashboard`);
 
     const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
       sameSite: 'lax' as const,
       path: '/',
       maxAge: 3600 * 24 * 30,
@@ -62,6 +68,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('OAuth callback error:', error);
-    return NextResponse.redirect(`${appUrl}/?error=auth_failed`);
+    return NextResponse.redirect(`${baseUrl}/?error=auth_failed`);
   }
 }

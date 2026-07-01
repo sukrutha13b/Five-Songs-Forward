@@ -29,7 +29,7 @@ export async function GET() {
 
   response.cookies.set('spotify_auth_state', state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: true,
     sameSite: 'lax',
     maxAge: 600,
     path: '/',

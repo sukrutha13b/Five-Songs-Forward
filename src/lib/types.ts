@@ -18,6 +18,8 @@ export interface CandidateTrack extends SeedTrack {
 
 export interface GeneratedPlaylist {
   directionSummary: string;
+  artists: string[];
+  keywords: string[];
   tracks: CandidateTrack[];
 }
 

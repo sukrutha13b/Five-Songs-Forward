@@ -60,6 +60,8 @@ export async function POST(request: NextRequest) {
 
     const playlist: GeneratedPlaylist = {
       directionSummary: llmInterpretation.directionSummary,
+      artists: llmInterpretation.artists,
+      keywords: llmInterpretation.keywords,
       tracks: finalTracks,
     };
 

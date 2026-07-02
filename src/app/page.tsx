@@ -1,31 +1,68 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import LoginButton from '@/components/LoginButton';
+import { useState } from 'react';
+import { useSeeds } from '@/hooks/useSeeds';
+import SeedInput from '@/components/SeedInput';
+import GenerateButton from '@/components/GenerateButton';
+import PlaylistResult from '@/components/PlaylistResult';
+import { GeneratedPlaylist } from '@/lib/types';
+
+type Phase = 'input' | 'generating' | 'result';
 
 export default function Home() {
-  const router = useRouter();
+  const { seeds, addSeed, removeSeed, canGenerate, clearSeeds } = useSeeds();
+  const [phase, setPhase] = useState<Phase>('input');
+  const [playlist, setPlaylist] = useState<GeneratedPlaylist | null>(null);
 
-  useEffect(() => {
-    fetch('/api/spotify/user')
-      .then((res) => {
-        if (res.ok) router.push('/dashboard');
-      })
-      .catch(() => {});
-  }, [router]);
+  const handleResult = (result: GeneratedPlaylist) => {
+    setPlaylist(result);
+    setPhase('result');
+  };
+
+  const handleStartOver = () => {
+    setPlaylist(null);
+    setPhase('input');
+    clearSeeds();
+  };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4">
-      <div className="max-w-2xl text-center">
-        <h1 className="mb-4 text-5xl font-bold tracking-tight text-white sm:text-6xl">
+    <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl font-bold sm:text-4xl">
           Five Songs <span className="text-[#1DB954]">Forward</span>
         </h1>
-        <p className="mb-10 text-lg text-gray-400">
-          Tell us where you&apos;re going. Drop 5 songs. We&apos;ll build the playlist.
+        <p className="mt-2 text-sm text-gray-400">
+          Drop 3–5 songs. We&apos;ll build a 25-track playlist that pushes your taste forward.
         </p>
-        <LoginButton />
       </div>
+
+      {phase === 'result' && playlist ? (
+        <PlaylistResult playlist={playlist} onStartOver={handleStartOver} />
+      ) : (
+        <div className="space-y-6">
+          <div>
+            <h2 className="mb-2 text-xl font-semibold">
+              {phase === 'generating' ? 'Building your playlist…' : 'Drop your seed tracks'}
+            </h2>
+            <p className="text-sm text-gray-400">
+              Pick 3–5 songs that represent where your taste is heading.
+            </p>
+          </div>
+
+          <SeedInput
+            seeds={seeds}
+            onAddSeed={addSeed}
+            onRemoveSeed={removeSeed}
+            locked={phase === 'generating'}
+          />
+
+          <GenerateButton
+            seeds={seeds}
+            canGenerate={canGenerate && phase !== 'generating'}
+            onResult={handleResult}
+          />
+        </div>
+      )}
     </main>
   );
 }

@@ -1,6 +1,6 @@
 import Groq from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { SeedTrack, CandidateTrack, LLMInterpretation } from './types';
+import { SeedTrack, LLMInterpretation } from './types';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -8,18 +8,17 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GEMINI_MODEL = 'gemini-2.0-flash';
 
-const INTERPRET_MAX_TOKENS = 500;
-const EXPLAIN_MAX_TOKENS = 80;
+const INTERPRET_MAX_TOKENS = 1200;
 
 const MAX_RETRIES = 1;
 const BASE_BACKOFF_MS = 800;
 const MAX_BACKOFF_MS = 4000;
-const HARD_RETRY_CAP_MS = 5000; // never wait longer than this for Retry-After
+const HARD_RETRY_CAP_MS = 5000;
 
 // Process-wide token bucket. Free tiers sit around 30 RPM on Groq and 15 RPM on
 // Gemini. We stay well below by capping total LLM requests to 25/min across the
-// whole server. Serverless cold instances each get their own bucket — that's
-// acceptable for the MVP; real production would need Redis.
+// whole server. Serverless cold instances each get their own bucket — acceptable
+// for MVP; real production would need Redis.
 const BUCKET_WINDOW_MS = 60_000;
 const BUCKET_MAX = 25;
 const bucket: number[] = [];
@@ -83,7 +82,7 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function callGroq(prompt: string, maxTokens: number, jsonMode: boolean): Promise<string | null> {
+async function callGroq(prompt: string, maxTokens: number): Promise<string | null> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const completion = await groq.chat.completions.create({
@@ -91,7 +90,7 @@ async function callGroq(prompt: string, maxTokens: number, jsonMode: boolean): P
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
         max_tokens: maxTokens,
-        ...(jsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+        response_format: { type: 'json_object' as const },
       });
       const content = completion.choices[0]?.message?.content;
       return content ?? null;
@@ -109,12 +108,12 @@ async function callGroq(prompt: string, maxTokens: number, jsonMode: boolean): P
   return null;
 }
 
-async function callGemini(prompt: string, maxTokens: number, jsonMode: boolean): Promise<string | null> {
+async function callGemini(prompt: string, maxTokens: number): Promise<string | null> {
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     generationConfig: {
       maxOutputTokens: maxTokens,
-      ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      responseMimeType: 'application/json',
     },
   });
 
@@ -139,14 +138,14 @@ async function callGemini(prompt: string, maxTokens: number, jsonMode: boolean):
   return null;
 }
 
-async function callLLM(prompt: string, maxTokens: number, jsonMode: boolean): Promise<string | null> {
+async function callLLM(prompt: string, maxTokens: number): Promise<string | null> {
   if (!tryConsume()) {
     console.warn('LLM local token bucket empty — skipping call');
     return null;
   }
 
   try {
-    const groqResult = await callGroq(prompt, maxTokens, jsonMode);
+    const groqResult = await callGroq(prompt, maxTokens);
     if (groqResult) return groqResult;
   } catch (error) {
     if (!isRateLimit(error)) {
@@ -156,7 +155,7 @@ async function callLLM(prompt: string, maxTokens: number, jsonMode: boolean): Pr
     console.warn('Groq exhausted, falling back to Gemini');
   }
 
-  return await callGemini(prompt, maxTokens, jsonMode);
+  return await callGemini(prompt, maxTokens);
 }
 
 export async function interpretSeeds(seeds: SeedTrack[]): Promise<LLMInterpretation | null> {
@@ -166,15 +165,30 @@ export async function interpretSeeds(seeds: SeedTrack[]): Promise<LLMInterpretat
 
 ${seedDescriptions}
 
-Return ONLY valid JSON with this structure (no prose, no markdown):
+Your job is to read these seeds as a set and articulate where the user is pointing. Then produce retrieval targets that a Spotify catalogue search will use to find 25 forward-looking tracks.
+
+You will produce two lists that drive Spotify's catalogue search:
+
+1. "artists" — 15 to 25 top-of-scene artists that fit the direction. The backend will search Spotify for each and pull their tracks. These are the safe, familiar-adjacent picks.
+
+2. "keywords" — 10 to 15 SHORT Spotify search queries (1-3 words each). These get typed into Spotify search verbatim, then we skip the top 15 mainstream results and take results 15-55. Their whole job is to surface artists you did NOT name in the "artists" list — the deep-cut discoveries.
+
+Because we skip the top mainstream results, keywords MUST be niche sub-genre or micro-scene tags that a smaller, more obscure world of artists uses. Broad umbrella genres ("indie folk", "shoegaze", "chamber pop") will still return your top-of-scene artists in results 15-55 — that's not what we want. Instead, go NICHE:
+
+  Good keyword examples: "midwest emo", "sadcore", "twee pop", "slowcore revival", "american primitivism", "bedroom pop indie", "dungeon synth folk", "post-rock ambient", "freak folk", "jangle pop", "riot grrrl", "no-fi indie", "britpop b-sides".
+
+  Bad keyword examples (too broad, returns same names): "indie folk", "shoegaze", "chamber pop", "post-rock".
+
+  Never use these (return nothing useful): mood adjectives ("melancholic", "wistful"), descriptive phrases ("poetic lyrics", "emotive soundscape"), sentence fragments.
+
+Return ONLY valid JSON with this exact structure (no prose, no markdown, no code fences):
 {
-  "directionSummary": "2 sentences describing where these seeds are pointing musically",
-  "searchQueries": ["5 short Spotify search queries that would surface tracks matching this direction — mix of genre words, mood words, and adjacent scene names"],
-  "artistSuggestions": ["up to 5 artist names (not from the seed list) whose catalogue fits this direction"],
-  "genreKeywords": ["up to 5 genre or mood tags"]
+  "directionSummary": "1-2 sentences describing where these seeds are pointing musically — the vibe, the era, the scene, the emotional register.",
+  "artists": ["15 to 25 artist names whose catalogue fits this direction. Do NOT repeat any artist that appears in the seeds. Real artists only, no invented names."],
+  "keywords": ["10 to 15 niche sub-genre or micro-scene tags, 1-3 words each. Follow the guidance above about niche vs broad."]
 }`;
 
-  const result = await callLLM(prompt, INTERPRET_MAX_TOKENS, true);
+  const result = await callLLM(prompt, INTERPRET_MAX_TOKENS);
   if (!result) return null;
 
   const parsed = tryParseJson(result);
@@ -184,28 +198,16 @@ Return ONLY valid JSON with this structure (no prose, no markdown):
   }
   return {
     directionSummary: String(parsed.directionSummary ?? ''),
-    searchQueries: coerceStringArray(parsed.searchQueries),
-    artistSuggestions: coerceStringArray(parsed.artistSuggestions),
-    genreKeywords: coerceStringArray(parsed.genreKeywords),
+    artists: coerceStringArray(parsed.artists),
+    keywords: coerceStringArray(parsed.keywords),
   };
-}
-
-export async function explainTrackMatch(
-  track: CandidateTrack,
-  seeds: SeedTrack[]
-): Promise<string | undefined> {
-  const seedNames = seeds.map((s) => `${s.name} by ${s.artist}`).join(', ');
-  const prompt = `In one sentence (no JSON, no quotes), explain why "${track.name}" by ${track.artist} matches the musical direction set by these seeds: ${seedNames}. Be specific about the musical quality that connects them.`;
-
-  const result = await callLLM(prompt, EXPLAIN_MAX_TOKENS, false);
-  return result?.trim() || undefined;
 }
 
 function tryParseJson(raw: string): Record<string, unknown> | null {
   try {
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    // fall through
+    // fall through to bracket-match
   }
   const match = raw.match(/\{[\s\S]*\}/);
   if (!match) return null;

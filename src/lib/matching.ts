@@ -1,114 +1,138 @@
 import { SeedTrack, CandidateTrack, CandidateSource, LLMInterpretation } from './types';
-import { searchTracks, getRecentlyPlayed, createPlaylist } from './spotify';
+import { searchTracks } from './spotify';
 
 const TARGET_TRACKS = 25;
-const MAX_PER_ARTIST = 3;
+const MAX_PER_ARTIST = 2;
+const ARTIST_QUERY_LIMIT = 6;
+const KEYWORD_QUERY_LIMIT = 40;
+const KEYWORD_QUERY_OFFSET = 15; // skip the mainstream — top hits are always the artists the LLM named
+const MAX_ARTIST_QUERIES = 25;
+const MAX_KEYWORD_QUERIES = 15;
 
-const SOURCE_WEIGHT: Record<CandidateSource, number> = {
-  catalogue: 1.0,
-  'artist-suggestion': 0.9,
-  'recently-played': 0.6,
-};
+// Source quotas — deliberately biased toward discovery so the app surfaces
+// artists the LLM did not name (the whole point of "forward-looking").
+const DISCOVERY_TARGET = 15;
+const NAMED_TARGET = 10;
 
 interface ScoredCandidate extends CandidateTrack {
   queryRank: number;
 }
 
-export async function gatherCandidates(
-  accessToken: string,
-  seeds: SeedTrack[],
-  llmInterpretation: LLMInterpretation | null
-): Promise<ScoredCandidate[]> {
-  const seedIds = new Set(seeds.map((s) => s.id));
-  const seen = new Map<string, ScoredCandidate>();
+export interface CandidateBreakdown {
+  candidates: ScoredCandidate[];
+  namedArtistCount: number;
+  discoveryCount: number;
+}
 
-  const addCandidate = (
-    track: SeedTrack,
-    source: CandidateSource,
-    queryRank: number
-  ) => {
+function normalizeArtist(name: string): string {
+  return name.toLowerCase().trim();
+}
+
+export async function gatherCandidates(
+  seeds: SeedTrack[],
+  llm: LLMInterpretation
+): Promise<CandidateBreakdown> {
+  const seedIds = new Set(seeds.map((s) => s.id));
+
+  const artists = llm.artists.slice(0, MAX_ARTIST_QUERIES);
+  const keywords = llm.keywords.slice(0, MAX_KEYWORD_QUERIES);
+
+  // The named-artist set is built from the LLM's list directly — NOT from search
+  // results. Search results include collaborators and features whose primary
+  // artist is unrelated (e.g. artist:"The National" returns a Taylor Swift
+  // track). Using the LLM list keeps classification honest.
+  const namedArtistNames = new Set(artists.map(normalizeArtist));
+
+  const [artistResults, keywordResults] = await Promise.all([
+    Promise.all(artists.map((a) => searchTracks(`artist:"${a}"`, ARTIST_QUERY_LIMIT))),
+    Promise.all(
+      keywords.map((k) => searchTracks(k, KEYWORD_QUERY_LIMIT, KEYWORD_QUERY_OFFSET))
+    ),
+  ]);
+
+  const classify = (track: SeedTrack): CandidateSource =>
+    namedArtistNames.has(normalizeArtist(track.artist)) ? 'named-artist' : 'discovery';
+
+  const seen = new Map<string, ScoredCandidate>();
+  const addCandidate = (track: SeedTrack, queryRank: number) => {
     if (seedIds.has(track.id)) return;
     const existing = seen.get(track.id);
     if (existing) {
-      // Keep the higher-weighted source if the track shows up multiple times.
-      if (SOURCE_WEIGHT[source] > SOURCE_WEIGHT[existing.source]) {
-        existing.source = source;
-      }
       existing.queryRank = Math.min(existing.queryRank, queryRank);
       return;
     }
     seen.set(track.id, {
       ...track,
-      source,
+      source: classify(track),
       queryRank,
       score: 0,
     });
   };
 
-  const searchQueries = llmInterpretation?.searchQueries?.length
-    ? llmInterpretation.searchQueries.slice(0, 5)
-    : fallbackQueries(seeds);
-
-  const artistQueries = (llmInterpretation?.artistSuggestions ?? []).slice(0, 5);
-
-  const [catalogueResults, artistResults, recent] = await Promise.all([
-    Promise.all(searchQueries.map((q) => searchTracks(accessToken, q, 20))),
-    Promise.all(artistQueries.map((a) => searchTracks(accessToken, `artist:${a}`, 10))),
-    getRecentlyPlayed(accessToken, 50).catch(() => [] as SeedTrack[]),
-  ]);
-
-  catalogueResults.forEach((tracks, qIdx) => {
-    tracks.forEach((track, tIdx) => {
-      addCandidate(track, 'catalogue', qIdx * 100 + tIdx);
-    });
-  });
-
   artistResults.forEach((tracks, qIdx) => {
     tracks.forEach((track, tIdx) => {
-      addCandidate(track, 'artist-suggestion', qIdx * 100 + tIdx);
+      addCandidate(track, qIdx * 100 + tIdx);
     });
   });
 
-  const seedArtistIds = new Set(seeds.map((s) => s.artistId));
-  recent.forEach((track, idx) => {
-    // Only "flavor" recent tracks that aren't already by a seed artist.
-    if (seedArtistIds.has(track.artistId)) return;
-    addCandidate(track, 'recently-played', idx);
+  keywordResults.forEach((tracks, qIdx) => {
+    tracks.forEach((track, tIdx) => {
+      addCandidate(track, (MAX_ARTIST_QUERIES + qIdx) * 100 + tIdx);
+    });
   });
 
-  return [...seen.values()];
-}
-
-function fallbackQueries(seeds: SeedTrack[]): string[] {
-  const artists = [...new Set(seeds.map((s) => s.artist))];
-  return artists.slice(0, 5);
+  const candidates = [...seen.values()];
+  return {
+    candidates,
+    namedArtistCount: candidates.filter((c) => c.source === 'named-artist').length,
+    discoveryCount: candidates.filter((c) => c.source === 'discovery').length,
+  };
 }
 
 export function rankAndSelect(candidates: ScoredCandidate[]): CandidateTrack[] {
   for (const c of candidates) {
-    // Higher rank number = later in the search result list = lower score.
-    const rankScore = 1 / (1 + c.queryRank * 0.02);
-    c.score = SOURCE_WEIGHT[c.source] * rankScore;
+    c.score = 1 / (1 + c.queryRank * 0.02);
   }
-
   candidates.sort((a, b) => b.score - a.score);
+
+  const discoveryPool = candidates.filter((c) => c.source === 'discovery');
+  const namedPool = candidates.filter((c) => c.source === 'named-artist');
 
   const selected: CandidateTrack[] = [];
   const artistCount = new Map<string, number>();
   const selectedIds = new Set<string>();
 
-  // First pass: honor the artist cap.
-  for (const c of candidates) {
-    if (selected.length >= TARGET_TRACKS) break;
-    const key = c.artistId || c.artist;
-    const count = artistCount.get(key) || 0;
-    if (count >= MAX_PER_ARTIST) continue;
-    selected.push(stripInternal(c));
-    artistCount.set(key, count + 1);
-    selectedIds.add(c.id);
+  const pickFrom = (pool: ScoredCandidate[], target: number) => {
+    let taken = 0;
+    for (const c of pool) {
+      if (selected.length >= TARGET_TRACKS || taken >= target) break;
+      if (selectedIds.has(c.id)) continue;
+      const key = c.artistId || c.artist;
+      if ((artistCount.get(key) || 0) >= MAX_PER_ARTIST) continue;
+      selected.push(stripInternal(c));
+      artistCount.set(key, (artistCount.get(key) || 0) + 1);
+      selectedIds.add(c.id);
+      taken++;
+    }
+  };
+
+  pickFrom(discoveryPool, DISCOVERY_TARGET);
+  pickFrom(namedPool, NAMED_TARGET);
+
+  // Backfill if either quota came up short.
+  if (selected.length < TARGET_TRACKS) {
+    const remaining = candidates.filter((c) => !selectedIds.has(c.id));
+    for (const c of remaining) {
+      if (selected.length >= TARGET_TRACKS) break;
+      const key = c.artistId || c.artist;
+      if ((artistCount.get(key) || 0) >= MAX_PER_ARTIST) continue;
+      selected.push(stripInternal(c));
+      artistCount.set(key, (artistCount.get(key) || 0) + 1);
+      selectedIds.add(c.id);
+    }
   }
 
-  // Second pass: if we're still short, relax the artist cap to hit 25.
+  // Last-ditch: relax the artist cap if still short.
   if (selected.length < TARGET_TRACKS) {
     for (const c of candidates) {
       if (selected.length >= TARGET_TRACKS) break;
@@ -131,37 +155,4 @@ function stripInternal(c: ScoredCandidate): CandidateTrack {
   const { queryRank: _q, ...rest } = c;
   void _q;
   return rest;
-}
-
-export async function generatePlaylistOnSpotify(
-  accessToken: string,
-  userId: string,
-  seeds: SeedTrack[],
-  tracks: CandidateTrack[],
-  directionSummary: string | undefined
-) {
-  const date = new Date().toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const name = `Five Songs Forward — ${date}`;
-  const seedNames = seeds.map((s) => s.name).join(', ');
-  const rawDescription = `Direction: ${directionSummary || 'Based on your seed tracks'}. Seeds: ${seedNames}.`;
-  const description = truncate(rawDescription, 300);
-  const trackUris = tracks.map((t) => t.uri);
-
-  const result = await createPlaylist(accessToken, userId, name, description, trackUris);
-
-  return {
-    spotifyPlaylistId: result.playlistId,
-    spotifyPlaylistUrl: result.playlistUrl,
-    tracks,
-    seedSummary: directionSummary || `A playlist inspired by ${seedNames}`,
-  };
-}
-
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return text.slice(0, max - 1).trimEnd() + '…';
 }

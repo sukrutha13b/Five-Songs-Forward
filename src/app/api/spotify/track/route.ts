@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getValidToken, getTrackDetails } from '@/lib/spotify';
+import { getTrackDetails } from '@/lib/spotify';
 
 const SPOTIFY_ID_RE = /^[A-Za-z0-9]{22}$/;
 
@@ -13,19 +13,18 @@ function extractTrackId(input: string): string | null {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const idParam = searchParams.get('id');
-  const urlParam = searchParams.get('url');
+  const idParam = request.nextUrl.searchParams.get('id');
+  const urlParam = request.nextUrl.searchParams.get('url');
 
-  const trackId = (idParam && extractTrackId(idParam)) || (urlParam && extractTrackId(urlParam)) || null;
+  const trackId =
+    (idParam && extractTrackId(idParam)) || (urlParam && extractTrackId(urlParam)) || null;
 
   if (!trackId) {
     return NextResponse.json({ error: 'Valid Spotify track ID or URL required' }, { status: 400 });
   }
 
   try {
-    const accessToken = await getValidToken();
-    const track = await getTrackDetails(accessToken, trackId);
+    const track = await getTrackDetails(trackId);
     return NextResponse.json(track);
   } catch (error) {
     console.error('Track details error:', error);

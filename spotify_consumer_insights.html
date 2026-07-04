@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spotify Discovery & Repetitive Listening — Consumer Insights for GTM</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Serif+Display&display=swap');
+
+  :root {
+    --bg: #0F1117;
+    --surface: #181B25;
+    --surface-2: #1F2330;
+    --border: #2A2E3B;
+    --text: #E8E9ED;
+    --muted: #8B8FA3;
+    --green: #1DB954;
+    --green-dim: rgba(29,185,84,0.12);
+    --coral: #FF6B6B;
+    --amber: #FFB347;
+    --violet: #A78BFA;
+    --cyan: #67E8F9;
+    --rose: #F472B6;
+    --blue: #60A5FA;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'Inter',-apple-system,sans-serif;
+    background:var(--bg); color:var(--text);
+    line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:1080px; margin:0 auto; padding:40px 32px 80px; }
+
+  /* HERO */
+  .hero { text-align:center; padding:48px 0 40px; border-bottom:1px solid var(--border); margin-bottom:40px; }
+  .eyebrow { font-size:11px; font-weight:600; letter-spacing:2.5px; text-transform:uppercase; color:var(--green); margin-bottom:14px; }
+  .hero h1 { font-family:'DM Serif Display',serif; font-size:clamp(30px,4.6vw,48px); font-weight:400; line-height:1.15; margin-bottom:16px; }
+  .hero h1 em { font-style:italic; color:var(--green); }
+  .hero-sub { font-size:15px; color:var(--muted); max-width:620px; margin:0 auto; }
+  .hero-meta { margin-top:24px; display:flex; justify-content:center; gap:28px; flex-wrap:wrap; }
+  .hero-meta span { font-size:12px; color:var(--muted); letter-spacing:0.4px; }
+  .hero-meta strong { color:var(--text); font-weight:600; }
+
+  /* KPI */
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin-bottom:48px; }
+  .kpi { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px; text-align:center; }
+  .kpi-v { font-size:34px; font-weight:800; line-height:1; margin-bottom:6px; }
+  .kpi-l { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-weight:500; }
+
+  /* SECTIONS */
+  .section { margin-bottom:52px; }
+  .snum { font-size:11px; font-weight:700; color:var(--green); letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; }
+  .section h2 { font-family:'DM Serif Display',serif; font-size:28px; font-weight:400; margin-bottom:14px; line-height:1.25; }
+  .section p { font-size:15px; color:var(--muted); margin-bottom:14px; max-width:780px; }
+  .section p strong { color:var(--text); font-weight:600; }
+
+  /* CHART */
+  .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin:20px 0; }
+  .chart-title { font-size:13px; font-weight:600; margin-bottom:14px; color:var(--text); }
+  .chart-wrap { position:relative; height:300px; }
+
+  /* INSIGHT CARDS */
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; margin:20px 0; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px; }
+  .card h3 { font-size:15px; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:8px; }
+  .card p { font-size:14px; color:var(--muted); line-height:1.6; margin-bottom:10px; }
+  .card p:last-child { margin-bottom:0; }
+
+  /* QUOTE */
+  .quote { border-left:3px solid var(--green); padding:14px 18px; background:var(--green-dim); border-radius:0 8px 8px 0; margin:14px 0; font-size:14px; font-style:italic; color:var(--text); }
+  .quote .src { font-style:normal; font-size:12px; color:var(--muted); margin-top:6px; }
+  .quote-violet { border-left-color:var(--violet); background:rgba(167,139,250,0.10); }
+  .quote-coral { border-left-color:var(--coral); background:rgba(255,107,107,0.10); }
+  .quote-amber { border-left-color:var(--amber); background:rgba(255,179,71,0.10); }
+
+  /* HBAR */
+  .hbar { margin:16px 0; }
+  .hbar-row { display:flex; align-items:center; margin-bottom:10px; gap:12px; }
+  .hbar-l { flex:0 0 200px; font-size:13px; color:var(--muted); text-align:right; }
+  .hbar-t { flex:1; height:24px; background:var(--surface-2); border-radius:6px; overflow:hidden; position:relative; }
+  .hbar-f { height:100%; border-radius:6px; transition:width 1s ease; }
+  .hbar-v { flex:0 0 50px; font-size:13px; font-weight:600; color:var(--text); }
+
+  /* TABLE */
+  table.dt { width:100%; border-collapse:collapse; margin:18px 0; font-size:14px; }
+  table.dt th { text-align:left; padding:12px 14px; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1px; border-bottom:1px solid var(--border); }
+  table.dt td { padding:13px 14px; border-bottom:1px solid var(--border); color:var(--text); vertical-align:top; }
+  table.dt tr:last-child td { border-bottom:none; }
+  table.dt td strong { font-weight:600; }
+
+  /* FLOW */
+  .flow { display:flex; align-items:center; justify-content:center; gap:0; margin:24px 0; flex-wrap:wrap; }
+  .fnode { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; text-align:center; min-width:130px; max-width:150px; }
+  .fnode strong { display:block; font-size:13px; margin-bottom:4px; color:var(--text); }
+  .fnode span { font-size:11px; color:var(--muted); line-height:1.4; }
+  .farrow { font-size:18px; color:var(--green); margin:0 4px; }
+
+  /* SEGMENT CARDS */
+  .seg-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(310px, 1fr)); gap:14px; margin:20px 0; }
+  .seg { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px; border-top:3px solid var(--green); }
+  .seg .seg-pop { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .seg h4 { font-size:17px; font-weight:700; margin-bottom:8px; }
+  .seg .seg-pain { font-size:12px; font-weight:600; margin-bottom:10px; }
+  .seg p { font-size:13.5px; color:var(--muted); line-height:1.6; margin-bottom:8px; }
+  .seg ul { font-size:13px; color:var(--muted); padding-left:18px; margin-top:8px; }
+  .seg ul li { margin-bottom:4px; }
+
+  /* GTM CARDS */
+  .gtm-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; margin:20px 0; }
+  .gtm-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:22px; position:relative; overflow:hidden; }
+  .gtm-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+  .gtm-card:nth-child(1)::before { background:var(--green); }
+  .gtm-card:nth-child(2)::before { background:var(--violet); }
+  .gtm-card:nth-child(3)::before { background:var(--coral); }
+  .gtm-card:nth-child(4)::before { background:var(--amber); }
+  .gtm-card:nth-child(5)::before { background:var(--cyan); }
+  .gtm-card:nth-child(6)::before { background:var(--rose); }
+  .gtm-card .tag { font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; }
+  .gtm-card h4 { font-size:15px; font-weight:700; margin-bottom:8px; }
+  .gtm-card p { font-size:13.5px; color:var(--muted); line-height:1.6; margin-bottom:8px; }
+  .gtm-card .meta { font-size:12px; color:var(--text); margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+  .gtm-card .meta strong { color:var(--muted); font-weight:500; }
+
+  .divider { border:none; border-top:1px solid var(--border); margin:44px 0; }
+  .footer { text-align:center; font-size:12px; color:var(--muted); padding-top:28px; border-top:1px solid var(--border); }
+
+  /* PRIORITY MATRIX */
+  .matrix { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; margin:20px 0; }
+  .matrix-title { font-size:13px; font-weight:600; margin-bottom:14px; }
+
+  @media (max-width:640px) {
+    .wrap { padding:24px 16px 48px; }
+    .hbar-l { flex:0 0 110px; font-size:11px; }
+    .flow { flex-direction:column; }
+    .farrow { transform:rotate(90deg); }
+    .hero-meta { flex-direction:column; gap:8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="eyebrow">Consumer Insights · GTM Input</div>
+    <h1>Spotify Users Want to Hear <em>Something New</em><br>— But Keep Hearing the Same Thing</h1>
+    <p class="hero-sub">A fresh consumer-insights analysis of 458 user reviews across Play Store, Reddit, and web forums — built to feed the GTM plan for Spotify's discovery and repetitive-listening problem.</p>
+    <div class="hero-meta">
+      <span><strong>458</strong> Reviews</span>
+      <span><strong>3</strong> Sources</span>
+      <span><strong>200</strong> Star-Rated</span>
+      <span><strong>8</strong> Themes</span>
+    </div>
+  </div>
+
+  <!-- KPI -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-v" style="color:var(--coral)">21%</div>
+      <div class="kpi-l">Reviews touch discovery or repetition</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-v" style="color:var(--amber)">34%</div>
+      <div class="kpi-l">Play Store reviews are 1–2★</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-v" style="color:var(--violet)">87%</div>
+      <div class="kpi-l">Discovery complaints come from Reddit + Web</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-v" style="color:var(--green)">3.26</div>
+      <div class="kpi-l">Avg Play Store rating (200 reviews)</div>
+    </div>
+  </div>
+
+  <!-- SECTION 1 -->
+  <div class="section">
+    <div class="snum">Section 01 · Landscape</div>
+    <h2>What the dataset is telling us</h2>
+    <p>The 458-review corpus splits unevenly across three sources, and each source tells a different story. <strong>Play Store reviews</strong> are short and skew toward app stability, ads, and the free-tier experience. <strong>Reddit threads</strong> are long-form, articulate, and centered on algorithm fatigue. <strong>Web sources</strong> (community forums, Quora, tech media) span both — but lean heavily on the structural critique of the recommendation system.</p>
+
+    <div class="chart-card">
+      <div class="chart-title">Source mix and rating distribution</div>
+      <div class="chart-wrap"><canvas id="sourceMix"></canvas></div>
+    </div>
+
+    <p>The Play Store rating distribution is <strong>bimodal</strong>: 47% give 4–5★ and 34% give 1–2★, with very few in the middle. This is the classic shape of a product people either love or are loud about hating — not a steady satisfaction curve. The negative tail is concentrated in ads, paywall, and bugs; the positive tail is in casual users who use Spotify as a utility and rate it on convenience alone.</p>
+
+    <div class="chart-card">
+      <div class="chart-title">Theme prevalence — % of all 458 reviews</div>
+      <div class="hbar">
+        <div class="hbar-row"><div class="hbar-l">Ads & Paywall</div><div class="hbar-t"><div class="hbar-f" style="width:82%;background:var(--coral)"></div></div><div class="hbar-v">16.4%</div></div>
+        <div class="hbar-row"><div class="hbar-l">Discovery & Recommendations</div><div class="hbar-t"><div class="hbar-f" style="width:57%;background:var(--violet)"></div></div><div class="hbar-v">11.4%</div></div>
+        <div class="hbar-row"><div class="hbar-l">Playlist & Library Control</div><div class="hbar-t"><div class="hbar-f" style="width:52%;background:var(--blue)"></div></div><div class="hbar-v">10.5%</div></div>
+        <div class="hbar-row"><div class="hbar-l">App Bugs & Stability</div><div class="hbar-t"><div class="hbar-f" style="width:48%;background:var(--amber)"></div></div><div class="hbar-v">9.6%</div></div>
+        <div class="hbar-row"><div class="hbar-l">Repetitive Playback</div><div class="hbar-t"><div class="hbar-f" style="width:36%;background:var(--rose)"></div></div><div class="hbar-v">7.2%</div></div>
+        <div class="hbar-row"><div class="hbar-l">Algorithm Distrust</div><div class="hbar-t"><div class="hbar-f" style="width:30%;background:var(--cyan)"></div></div><div class="hbar-v">5.9%</div></div>
+        <div class="hbar-row"><div class="hbar-l">Shuffle Issues</div><div class="hbar-t"><div class="hbar-f" style="width:17%;background:var(--green)"></div></div><div class="hbar-v">3.3%</div></div>
+        <div class="hbar-row"><div class="hbar-l">Music Fatigue</div><div class="hbar-t"><div class="hbar-f" style="width:12%;background:#9CA3AF"></div></div><div class="hbar-v">2.4%</div></div>
+      </div>
+    </div>
+
+    <p><strong>The GTM-relevant signal:</strong> ads/paywall and bugs are the biggest gross complaint categories, but they are well-trodden ground for Spotify and are also brand-defensive, not growth-oriented. Discovery, repetition, shuffle, and algorithm distrust — together <strong>~21% of all reviews and almost 50% of Reddit and web posts</strong> — describe a fundamentally different problem: users who are <em>already paying</em> or are deeply engaged feel the core product promise (a personal music universe) is breaking down. That is the segment a GTM campaign can act on.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 2: WHY USERS STRUGGLE -->
+  <div class="section">
+    <div class="snum">Section 02 · Research Question 1</div>
+    <h2>Why users struggle to discover new music</h2>
+    <p>Across the dataset, the discovery problem is not a lack of features — Spotify has more discovery surfaces than any competitor (Discover Weekly, Release Radar, Daily Mixes, Daylist, AI DJ, Smart Shuffle). The struggle is structural, and four mechanisms emerge consistently.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3><span style="color:var(--coral)">●</span> 1. The algorithm "figures you out" — then stops trying</h3>
+        <p>The single most-cited pattern. Users describe a turning point where Spotify locked in on their taste and stopped surfacing the unfamiliar. Early Spotify discovery is remembered as revelatory; current experience is described as recycling.</p>
+        <p>This is the most damaging perception in the dataset because it implies the product gets <em>worse</em> with tenure — the opposite of the loyalty curve Spotify wants.</p>
+      </div>
+      <div class="card">
+        <h3><span style="color:var(--amber)">●</span> 2. Recommendations point back to the user's own library</h3>
+        <p>Users repeatedly note that the "Recommended" section beneath playlists, and Discover Weekly itself, surfaces songs already in their library. The system appears to confuse "similar to what I listen to" with "what I already saved."</p>
+        <p>This breaks the implicit contract of a discovery feature: it's supposed to find things the user hasn't found yet.</p>
+      </div>
+      <div class="card">
+        <h3><span style="color:var(--violet)">●</span> 3. One-genre dominance collapses multi-dimensional taste</h3>
+        <p>Multi-genre listeners report that Discover Weekly fixates on one genre they've listened to recently — even when their overall taste is much wider. Users with eclectic libraries describe getting "alternative/garage/stoner" when they listen to "much more than that."</p>
+        <p>A single deep-listen session can warp the profile for weeks.</p>
+      </div>
+      <div class="card">
+        <h3><span style="color:var(--cyan)">●</span> 4. Distrust of motives — "Discovery Mode" perceived as payola</h3>
+        <p>Multiple Reddit and web sources describe Spotify's Discovery Mode (artists accepting reduced royalties for algorithmic placement) as pay-to-play. Once a user learns this, every algorithmic recommendation becomes suspect.</p>
+        <p>This is a trust problem on top of a relevance problem — and trust is harder to rebuild than relevance.</p>
+      </div>
+    </div>
+
+    <div class="quote">
+      "Been trying to break out of the algorithm loop and honestly starting to feel like Spotify is kind of bad for actual music discovery once it figures you out."
+      <div class="src">— Reddit, r/truespotify</div>
+    </div>
+
+    <div class="quote quote-amber">
+      "Why does Spotify keep recommending me the exact same songs in my recommended tab. Nearly every single song on the recommended tab has been there for months."
+      <div class="src">— Web (Spotify Community forum)</div>
+    </div>
+
+    <div class="quote quote-violet">
+      "My Discover Weekly was quite monotonous, displaying only sort of alternative/garage/stoner, when I listen to much more than that."
+      <div class="src">— Reddit</div>
+    </div>
+
+    <p>A self-reinforcing cycle underlies all four mechanisms:</p>
+
+    <div class="flow">
+      <div class="fnode" style="border-color:var(--coral)"><strong>User plays familiar</strong><span>Skips unfamiliar</span></div>
+      <div class="farrow">→</div>
+      <div class="fnode" style="border-color:var(--amber)"><strong>Algorithm narrows</strong><span>Reads skips as dislike</span></div>
+      <div class="farrow">→</div>
+      <div class="fnode" style="border-color:var(--violet)"><strong>Recs collapse</strong><span>Same genre, same artists</span></div>
+      <div class="farrow">→</div>
+      <div class="fnode" style="border-color:var(--cyan)"><strong>User disengages</strong><span>Defaults to safe</span></div>
+      <div class="farrow">→</div>
+      <div class="fnode" style="border-color:var(--green)"><strong>Bubble hardens</strong><span>Discovery dies</span></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 3: RECOMMENDATION FRUSTRATIONS -->
+  <div class="section">
+    <div class="snum">Section 03 · Research Question 2</div>
+    <h2>Most common frustrations with recommendations</h2>
+    <p>We coded the specific complaints inside discovery-related reviews. Six distinct frustrations emerged — ranked here by frequency within the discovery-cluster (n≈85 reviews touching discovery or algorithm themes).</p>
+
+    <table class="dt">
+      <thead>
+        <tr><th>#</th><th>Frustration</th><th>What users actually say</th><th>Frequency</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td><strong>Already-known songs in "Recommended"</strong></td>
+          <td>Recommended sections and Discover Weekly surface tracks already saved in the user's library. Hours of personalisation produces familiarity, not novelty.</td>
+          <td style="color:var(--coral)"><strong>High</strong></td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td><strong>Discover Weekly degradation over time</strong></td>
+          <td>Long-tenured users describe DW as a former highlight that has steadily declined — fewer good songs each week, narrower genre band, more repeat suggestions.</td>
+          <td style="color:var(--coral)"><strong>High</strong></td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td><strong>Shuffle that isn't shuffle</strong></td>
+          <td>Users with playlists of 2,000–10,000 songs report hearing the same 15–50 tracks. Spotify confirms shuffle prioritises tracks "you listen to most" — users experience this as broken randomness.</td>
+          <td style="color:var(--amber)"><strong>Medium-High</strong></td>
+        </tr>
+        <tr>
+          <td><strong>4</strong></td>
+          <td><strong>Single-genre tunnel vision</strong></td>
+          <td>One recent listening session in a different genre derails recommendations for weeks. No way to maintain multiple taste contexts in one account.</td>
+          <td style="color:var(--amber)"><strong>Medium</strong></td>
+        </tr>
+        <tr>
+          <td><strong>5</strong></td>
+          <td><strong>"Don't play this" signal doesn't stick</strong></td>
+          <td>Hidden tracks resurface; the minus button on Discover Weekly is reportedly ineffective. Users lose faith that their negative feedback registers.</td>
+          <td style="color:var(--violet)"><strong>Medium</strong></td>
+        </tr>
+        <tr>
+          <td><strong>6</strong></td>
+          <td><strong>Distrust of motives (Discovery Mode)</strong></td>
+          <td>Awareness that some placements are paid (artists accept reduced royalties for visibility) is widespread on Reddit and web forums. Erodes belief that recs are taste-driven.</td>
+          <td style="color:var(--violet)"><strong>Medium</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="quote quote-coral">
+      "Listening to Spotify on shuffle and it just plays you the same selection of 15 or so songs from the 2000 or so in your Liked."
+      <div class="src">— Web (community forum)</div>
+    </div>
+
+    <p><strong>GTM read:</strong> frustrations 1 and 2 are about <em>relevance decay</em> — the gap between what was promised at signup and what's delivered after two years. Frustrations 3 and 4 are about <em>user control</em>. Frustrations 5 and 6 are about <em>trust</em>. A GTM campaign that addresses any one of these without acknowledging the others will feel hollow. The most credible messaging will pair a relevance fix (better discovery) with a visible control or trust handle.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 4: DESIRED BEHAVIORS -->
+  <div class="section">
+    <div class="snum">Section 04 · Research Question 3</div>
+    <h2>What listening behaviors are users trying to achieve?</h2>
+    <p>When you read past the complaints, users articulate four distinct listening goals — and there's a consistent gap between what they want and what Spotify's defaults optimise for.</p>
+
+    <table class="dt">
+      <thead>
+        <tr><th>Listening goal</th><th>How users describe it</th><th>What the algorithm does instead</th><th>Gap</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Controlled exploration</strong></td>
+          <td>"I want to find new music that still fits my taste, on my terms"</td>
+          <td>Broad recs based on listening history; no novelty dial</td>
+          <td style="color:var(--coral)"><strong>High</strong></td>
+        </tr>
+        <tr>
+          <td><strong>True shuffle equity</strong></td>
+          <td>"Play all 10,000 songs across my library — not the same 15"</td>
+          <td>Engagement-weighted shuffle prioritises predicted listen-through</td>
+          <td style="color:var(--coral)"><strong>High</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Comfort listening (background)</strong></td>
+          <td>"Just play my playlist while I work — don't add random songs"</td>
+          <td>Smart Shuffle and autoplay inject algorithmic picks into curated lists</td>
+          <td style="color:var(--amber)"><strong>Medium</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Genre-specific deep-dive</strong></td>
+          <td>"Help me explore one genre fully without contaminating my profile"</td>
+          <td>Single taste profile; deep listens warp recommendations for weeks</td>
+          <td style="color:var(--amber)"><strong>Medium</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>A useful reframe for GTM: <strong>users aren't asking for more recommendations — they're asking for more agency over recommendations.</strong> Every other goal in the dataset can be derived from this one principle. The product narrative that wins is one of <em>giving the listener the steering wheel</em>, not one of <em>making the autopilot smarter</em>.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 5: REPETITION CAUSES -->
+  <div class="section">
+    <div class="snum">Section 05 · Research Question 4</div>
+    <h2>What causes repetitive listening</h2>
+    <p>Repetition has two distinct causes in the data, and they need to be untangled before any product or marketing response is built. Users are sometimes blamed for "lazy listening" — but the data shows the system contributes at least as much.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3><span style="color:var(--coral)">●</span> System-side: engagement-weighted defaults</h3>
+        <p><strong>Shuffle prioritises predicted listen-through.</strong> Spotify itself confirms shuffle "prioritises the songs that Spotify perceives you listen to most." Rational for minimising skips. Toxic for variety.</p>
+        <p><strong>Autoplay defaults to safety.</strong> When a playlist ends, autoplay draws from the narrowest, highest-confidence pool — invariably songs the user already knows.</p>
+        <p><strong>Smart Shuffle blends recs into curated playlists.</strong> Users who curate carefully find their playlists subtly overwritten with algorithmic picks.</p>
+        <p><strong>Hidden tracks resurface.</strong> Negative signals don't appear to persist reliably.</p>
+      </div>
+      <div class="card">
+        <h3><span style="color:var(--amber)">●</span> Behaviour-side: passive listening trains the system</h3>
+        <p><strong>Comfort listening as background.</strong> When users put Spotify on while working or driving, they're training the algorithm toward safety. The algorithm doesn't distinguish "I love this" from "I didn't bother to skip."</p>
+        <p><strong>Listening fatigue.</strong> Heavy listeners (multiple hours/day) report music saturation — nothing hits anymore. This is a psychological state Spotify's defaults make worse, not better, by doubling down on the familiar.</p>
+        <p><strong>Habit lock-in.</strong> Users with strong daily routines (commute, gym, work) develop fixed playlist habits that the algorithm reinforces rather than disrupts.</p>
+      </div>
+    </div>
+
+    <div class="quote quote-coral">
+      "I have a playlist with 10,000 songs and use shuffle to listen to them. What I realised the past weeks is that the same songs are played over."
+      <div class="src">— Web (community forum)</div>
+    </div>
+
+    <div class="quote quote-amber">
+      "Insanely bored of my music… I listen to music 12 hours a day, and I'm getting burnt out of my whole playlist (almost 1k songs)."
+      <div class="src">— Reddit, r/MusicRecommendations</div>
+    </div>
+
+    <p>The product implication is sharp: <strong>repetition is mostly a defaults problem, not a catalog problem.</strong> Users with 1,000-to-10,000-song libraries are still hearing the same handful. Adding more music doesn't fix this; changing how the existing music is surfaced does.</p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 6: SEGMENTS -->
+  <div class="section">
+    <div class="snum">Section 06 · Research Question 5</div>
+    <h2>Five user segments, five different discovery problems</h2>
+    <p>Cross-referencing source channel, content themes, and complaint patterns yields five behaviourally distinct segments. Each has a different relationship to discovery — and each requires a different GTM angle.</p>
+
+    <div class="seg-grid">
+      <div class="seg" style="border-top-color:var(--violet)">
+        <div class="seg-pop">~25% of reviews · Reddit-skewed</div>
+        <h4>The Plateaued Long-Termers</h4>
+        <div class="seg-pain" style="color:var(--violet)">Pain: algorithm stagnation</div>
+        <p>Long-tenured Premium users whose recommendations have stopped evolving. They remember Discover Weekly being good and feel it has decayed. They're trying — they engage with the discovery features — but the system surfaces what they already know.</p>
+        <ul>
+          <li>Highest churn-risk segment</li>
+          <li>Articulate, vocal on Reddit, willing to switch platforms</li>
+          <li>Will engage with any credible discovery upgrade</li>
+        </ul>
+      </div>
+
+      <div class="seg" style="border-top-color:var(--coral)">
+        <div class="seg-pop">~18% of reviews · Web-skewed</div>
+        <h4>The Big-Library Shufflers</h4>
+        <div class="seg-pain" style="color:var(--coral)">Pain: shuffle that isn't random</div>
+        <p>Power users who curate libraries of 2,000–10,000+ songs and use shuffle as their primary play mode. Their complaint is mechanical and provable: shuffle plays a small subset on repeat. They're not asking for better recommendations — they're asking for fair distribution of their own library.</p>
+        <ul>
+          <li>The easiest segment to satisfy (one toggle solves it)</li>
+          <li>Highly evangelistic when satisfied</li>
+        </ul>
+      </div>
+
+      <div class="seg" style="border-top-color:var(--amber)">
+        <div class="seg-pop">~12% of reviews · Reddit-skewed</div>
+        <h4>The Burnt-Out Heavy Listeners</h4>
+        <div class="seg-pain" style="color:var(--amber)">Pain: music fatigue</div>
+        <p>Multi-hour daily listeners who have psychologically saturated on their current rotation. They describe a state of "nothing hits anymore." Spotify makes this worse by serving more of the same. They want jolts of novelty calibrated to break fatigue without resetting their taste.</p>
+        <ul>
+          <li>Smallest segment but most acute pain</li>
+          <li>Open to bold interventions (mood-based, intent-based)</li>
+        </ul>
+      </div>
+
+      <div class="seg" style="border-top-color:var(--cyan)">
+        <div class="seg-pop">~32% of reviews · Play Store-heavy</div>
+        <h4>The Free-Tier Fenced-In</h4>
+        <div class="seg-pain" style="color:var(--cyan)">Pain: can't act on discovery</div>
+        <p>Free users for whom discovery is theoretically possible but practically blocked: limited skips, forced shuffle, no on-demand play. When they encounter something interesting, they can't replay it or explore the artist. The friction makes discovery effort-prohibitive.</p>
+        <ul>
+          <li>Largest single segment by review volume</li>
+          <li>Primary conversion target — discovery is the lever</li>
+        </ul>
+      </div>
+
+      <div class="seg" style="border-top-color:var(--green)">
+        <div class="seg-pop">~13% of reviews · Play Store 5★</div>
+        <h4>The Satisfied Utility Users</h4>
+        <div class="seg-pain" style="color:var(--green)">Pain: none expressed</div>
+        <p>Casual users who treat Spotify as background utility. They write short, positive Play Store reviews ("great app, my favourite songs"). They don't articulate a discovery problem because they don't expect discovery — they expect access to known music. The repetition is invisible to them.</p>
+        <ul>
+          <li>Stable but low-engagement</li>
+          <li>Latent expansion opportunity if discovery becomes friction-free</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">Segment positioning · pain intensity vs willingness to engage with new features</div>
+      <div class="chart-wrap"><canvas id="segChart"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 7: UNMET NEEDS -->
+  <div class="section">
+    <div class="snum">Section 07 · Research Question 6</div>
+    <h2>Unmet needs that surface consistently</h2>
+    <p>Six distinct unmet needs surfaced across multiple segments and sources. Ranking is based on signal frequency in the dataset and the strength of the language used.</p>
+
+    <div class="gtm-grid">
+      <div class="gtm-card">
+        <div class="tag" style="color:var(--green)">Critical · #1 unmet need</div>
+        <h4>A working "true random" shuffle</h4>
+        <p>The most mechanically solvable complaint in the data. Users with large libraries want unweighted, equal-probability shuffle across their full library. Today's "smart" shuffle is the source of the loudest, most concrete complaints.</p>
+        <div class="meta"><strong>Signal:</strong> direct mentions in 15+ reviews, sometimes with playlist sizes as proof</div>
+      </div>
+      <div class="gtm-card">
+        <div class="tag" style="color:var(--violet)">Critical</div>
+        <h4>A novelty / familiarity dial</h4>
+        <p>Users want explicit control over how adventurous recommendations should be. A simple "safe ↔ surprise me" control would let them modulate discovery intensity without abandoning personalisation.</p>
+        <div class="meta"><strong>Signal:</strong> recurring "I don't know what to listen to" framing on Reddit</div>
+      </div>
+      <div class="gtm-card">
+        <div class="tag" style="color:var(--coral)">High</div>
+        <h4>Genre-aware Discover Weekly</h4>
+        <p>The dataset's single most positively-received feature mention is the genre-separated Discover Weekly variant. Multi-genre listeners want their full taste reflected — not just the dominant axis.</p>
+        <div class="meta"><strong>Signal:</strong> "game-changer" framing on Reddit; standout positive sentiment</div>
+      </div>
+      <div class="gtm-card">
+        <div class="tag" style="color:var(--amber)">High</div>
+        <h4>Effective "don't play this" signal</h4>
+        <p>Hidden and disliked tracks reportedly resurface. The negative signal needs to be durable and respected across surfaces — and users need to feel that it works.</p>
+        <div class="meta"><strong>Signal:</strong> recurring "hide isn't working" frustration on Reddit + community forums</div>
+      </div>
+      <div class="gtm-card">
+        <div class="tag" style="color:var(--cyan)">Medium</div>
+        <h4>Recommendation provenance / transparency</h4>
+        <p>Once users learn about Discovery Mode (paid placement), trust in all recommendations cracks. Surfacing why a song is recommended ("because you played X") rebuilds credibility.</p>
+        <div class="meta"><strong>Signal:</strong> multiple long-form web articles + Reddit threads on Discovery Mode</div>
+      </div>
+      <div class="gtm-card">
+        <div class="tag" style="color:var(--rose)">Medium</div>
+        <h4>Intent-based / prompted playlists</h4>
+        <p>The Prompted Playlist beta directly addresses the gap between "what the algorithm thinks I want" and "what I actually want right now." Users want more ways to express situational intent.</p>
+        <div class="meta"><strong>Signal:</strong> explicit feature mention in web sources; high latent demand</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 8: GTM IMPLICATIONS -->
+  <div class="section">
+    <div class="snum">Section 08 · GTM Implications</div>
+    <h2>What this means for the go-to-market plan</h2>
+    <p>Four GTM moves are supported directly by the dataset. Each pairs a target segment with a product fix that's already implied by the unmet needs above. Sequencing reflects ease of execution and audience receptiveness.</p>
+
+    <div class="grid-2">
+      <div class="card" style="border-left:3px solid var(--green)">
+        <h3>Move 1 · Win back the Plateaued Long-Termers</h3>
+        <p><strong>Audience:</strong> Premium users with 2+ years tenure who feel the algorithm has decayed.</p>
+        <p><strong>Hook:</strong> "Discover Weekly, rebuilt." Lead with the multi-genre Discover Weekly variant — the only product mention in the dataset with unambiguously positive sentiment.</p>
+        <p><strong>Channel:</strong> Reddit-native communications, in-app announcements for tenured users, email to the inactive-Premium cohort.</p>
+        <p><strong>Why it works:</strong> this segment is articulate, vocal, and already trying — they just need evidence the system has changed.</p>
+      </div>
+      <div class="card" style="border-left:3px solid var(--coral)">
+        <h3>Move 2 · Ship "Pure Shuffle" and own the win</h3>
+        <p><strong>Audience:</strong> Big-Library Shufflers — small in number but extreme in advocacy when satisfied.</p>
+        <p><strong>Hook:</strong> "Every song. Every time." A toggle that gives true uniform-random shuffle across the full library or playlist.</p>
+        <p><strong>Channel:</strong> Twitter/X and Reddit; community forum re-engagement; let the power users do the marketing.</p>
+        <p><strong>Why it works:</strong> the complaint is so universal, specific, and provable that fixing it generates organic word-of-mouth on the platforms where the complaint lives.</p>
+      </div>
+      <div class="card" style="border-left:3px solid var(--violet)">
+        <h3>Move 3 · "Surprise me" — a novelty dial on the home screen</h3>
+        <p><strong>Audience:</strong> Burnt-Out Heavy Listeners and Plateaued Long-Termers; partial overlap.</p>
+        <p><strong>Hook:</strong> A visible familiar ↔ adventurous slider on Home, Daily Mixes, and Radio. Users see the control; they don't need to trust an invisible algorithm.</p>
+        <p><strong>Channel:</strong> in-app onboarding for the feature; lifestyle content marketing positioning Spotify as the listener's tool, not the listener's algorithm.</p>
+        <p><strong>Why it works:</strong> the dataset's underlying theme is agency. A visible control directly delivers it.</p>
+      </div>
+      <div class="card" style="border-left:3px solid var(--cyan)">
+        <h3>Move 4 · Use discovery as the Free→Premium conversion lever</h3>
+        <p><strong>Audience:</strong> Free-Tier Fenced-In — the largest single segment in the data.</p>
+        <p><strong>Hook:</strong> reframe Premium as "the discovery upgrade," not "the ads upgrade." Lead with on-demand replay, unlimited skips, and access to discovery features — explicitly positioned as <em>the ability to act on what you find</em>.</p>
+        <p><strong>Channel:</strong> in-app prompts triggered by free-tier discovery friction moments (e.g. skip limit hit during a Discover Weekly play).</p>
+        <p><strong>Why it works:</strong> ads-removal is the saturated narrative. Discovery freedom is a fresher, more emotionally resonant frame.</p>
+      </div>
+    </div>
+
+    <p><strong>What not to lead with.</strong> The data suggests three messages that would backfire:</p>
+    <ul style="color:var(--muted); font-size:14px; padding-left:24px; max-width:780px;">
+      <li style="margin-bottom:6px;"><strong>"Smarter recommendations"</strong> — sounds like more of what users already distrust.</li>
+      <li style="margin-bottom:6px;"><strong>"AI-powered discovery"</strong> — the AI framing now activates skepticism more than excitement in this audience (especially post-Discovery Mode awareness).</li>
+      <li><strong>"Personalised for you"</strong> — exactly the promise users feel was broken; reusing the same language re-opens the wound.</li>
+    </ul>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SECTION 9: METHODOLOGY -->
+  <div class="section">
+    <div class="snum">Section 09 · Methodology & Limitations</div>
+    <h2>How this was built</h2>
+    <p><strong>Data:</strong> 458 user reviews across three sources — 224 Play Store (200 with star ratings), 118 Reddit threads, 116 web/forum sources. Each row is a review with source, text, and (where available) a 1–5★ rating.</p>
+    <p><strong>Method:</strong> theme tagging via keyword pattern matching, followed by qualitative review of substantive (>200 char) entries. Themes were validated against frequency and source distribution. Segments were derived inductively from co-occurrence patterns of themes and source channels.</p>
+    <p><strong>Limitations:</strong></p>
+    <ul style="color:var(--muted); font-size:14px; padding-left:24px; max-width:780px;">
+      <li style="margin-bottom:6px;">Reddit and web sources self-select for users with strong opinions — negative skew is real. The "Satisfied Utility" segment is constructed mostly from short 5★ Play Store reviews and is likely undersized in the data relative to the true user base.</li>
+      <li style="margin-bottom:6px;">Star ratings exist only for Play Store; sentiment for Reddit and web is inferred from text content.</li>
+      <li style="margin-bottom:6px;">Segment size percentages are based on share of reviews, not share of users. They directionally indicate complaint volume, not market sizing.</li>
+      <li>Some web entries are article headlines or community-forum summaries rather than first-person reviews; these were included where they reflected aggregated user sentiment but treated with care in quote selection.</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    Spotify Discovery & Repetitive Listening — Consumer Insights for GTM · 458 reviews · Fresh analysis · June 2026
+  </div>
+
+</div>
+
+<script>
+  Chart.defaults.color = '#8B8FA3';
+  Chart.defaults.borderColor = '#2A2E3B';
+  Chart.defaults.font.family = 'Inter, sans-serif';
+
+  // Source × rating mix
+  new Chart(document.getElementById('sourceMix'), {
+    type: 'bar',
+    data: {
+      labels: ['Play Store (224)', 'Reddit (118)', 'Web (116)'],
+      datasets: [
+        { label: '1–2★ / Negative', data: [76, 0, 0], backgroundColor: '#FF6B6B', borderRadius: 4, stack: 's' },
+        { label: '3★ / Neutral', data: [18, 0, 0], backgroundColor: '#FFB347', borderRadius: 4, stack: 's' },
+        { label: '4–5★ / Positive', data: [106, 0, 0], backgroundColor: '#1DB954', borderRadius: 4, stack: 's' },
+        { label: 'No rating (text only)', data: [24, 118, 116], backgroundColor: '#A78BFA', borderRadius: 4, stack: 's' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', padding: 16, font: { size: 11 } } },
+        tooltip: { mode: 'index' }
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, grid: { color: '#2A2E3B' }, ticks: { stepSize: 50 } }
+      }
+    }
+  });
+
+  // Segment positioning bubble
+  new Chart(document.getElementById('segChart'), {
+    type: 'bubble',
+    data: {
+      datasets: [
+        { label: 'Plateaued Long-Termers', data: [{ x: 75, y: 90, r: 22 }], backgroundColor: 'rgba(167,139,250,0.55)', borderColor: '#A78BFA' },
+        { label: 'Big-Library Shufflers', data: [{ x: 60, y: 78, r: 16 }], backgroundColor: 'rgba(255,107,107,0.55)', borderColor: '#FF6B6B' },
+        { label: 'Burnt-Out Heavy Listeners', data: [{ x: 88, y: 72, r: 12 }], backgroundColor: 'rgba(255,179,71,0.55)', borderColor: '#FFB347' },
+        { label: 'Free-Tier Fenced-In', data: [{ x: 50, y: 60, r: 26 }], backgroundColor: 'rgba(103,232,249,0.55)', borderColor: '#67E8F9' },
+        { label: 'Satisfied Utility', data: [{ x: 15, y: 20, r: 14 }], backgroundColor: 'rgba(29,185,84,0.55)', borderColor: '#1DB954' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', padding: 14, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label} · pain ${ctx.raw.y}, engagement ${ctx.raw.x}`
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Willingness to engage with new features →', color: '#8B8FA3' }, min: 0, max: 100, grid: { color: '#2A2E3B' } },
+        y: { title: { display: true, text: 'Pain intensity →', color: '#8B8FA3' }, min: 0, max: 100, grid: { color: '#2A2E3B' } }
+      }
+    }
+  });
+</script>
+</body>
+</html>
